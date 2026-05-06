@@ -11,7 +11,7 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from core.config import settings
 from core.metrics import REGISTRY
-from api.routes import auth, health, tasks, chat
+from api.routes import auth, health, tasks, chat, admin
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ app.include_router(health.router)                              # GET /health
 app.include_router(auth.router,  prefix="/api/auth",  tags=["auth"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(chat.router)                                # POST /api/chat, GET /api/chat/history, etc.
+app.include_router(admin.router)                               # /api/admin/* (Phase 8)
 
 # ── Prometheus Metrics (Phase 7) ──────────────────────────────────────────────
 @app.get("/metrics", tags=["monitoring"])

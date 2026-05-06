@@ -34,6 +34,7 @@ passlib[argon2]>=1.7.4
 
 # HTTP client
 httpx>=0.25.0
+requests>=2.31.0
 
 # Git / GitHub
 PyGithub>=2.1.1

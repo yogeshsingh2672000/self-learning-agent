@@ -4,6 +4,8 @@ Background task definitions.
 Phase 4: generate_tool_code — triggered when a task is APPROVED
 Phase 5: run_tests           — triggered when code generation succeeds
          patch_and_retry     — triggered when tests fail (≤3 attempts)
+Phase 6: handle_pr_approved, handle_pr_merged — GitHub webhook handlers
+Phase 8: Rate limiting, cost controls, circuit breaker, notifications
 """
 import json
 import uuid
@@ -12,6 +14,9 @@ from datetime import datetime, timezone
 from workers.celery_app import celery_app
 from core.database import SessionLocal
 from core.models import Task, TaskStatus, Feature, FeatureStatus, AgentLog, AgentType, AgentLogStatus
+from core.hardening import RateLimiter, CostController, CircuitBreaker
+from core.notifications import NotificationService
+from core.config import settings
 from agents.coding_agent import get_coding_agent
 
 
@@ -27,6 +32,8 @@ def generate_tool_code(self, task_id: str) -> dict:
     Celery task: Generate tool code for an approved task.
 
     Triggered when a task transitions from PENDING_APPROVAL → APPROVED.
+    
+    Phase 8: Checks rate limiting before allowing code generation.
 
     Args:
         task_id: UUID of the task
@@ -50,6 +57,50 @@ def generate_tool_code(self, task_id: str) -> dict:
             db.add(log_entry)
             db.commit()
             return {"success": False, "error": "Task not found", "details": {}}
+
+        # ── Phase 8: Check rate limiting ───────────────────────────
+        is_limited, limit_info = RateLimiter.is_rate_limited(
+            db,
+            daily_limit=settings.daily_gap_limit,
+            hours=settings.gap_rate_limit_hours,
+        )
+
+        if is_limited:
+            task.status = TaskStatus.REJECTED
+            rejection_msg = (
+                f"Rate limit exceeded: {limit_info['current_count']} gaps created today "
+                f"(limit: {limit_info['daily_limit']})"
+            )
+
+            log_entry = AgentLog(
+                agent_type=AgentType.CODING,
+                task_id=task.id,
+                action="rate_limited",
+                details={
+                    "tool_name": task.title,
+                    **limit_info,
+                },
+                status=AgentLogStatus.FAILURE,
+                error_message=rejection_msg,
+            )
+            db.add(log_entry)
+            db.commit()
+
+            # Log the rate limit attempt
+            RateLimiter.log_gap_detection_attempt(
+                db, task.description or "", allowed=False, reason=rejection_msg
+            )
+
+            return {
+                "success": False,
+                "error": rejection_msg,
+                "details": limit_info,
+            }
+
+        # Log allowed gap
+        RateLimiter.log_gap_detection_attempt(
+            db, task.description or "", allowed=True
+        )
 
         # Log start
         log_entry = AgentLog(
@@ -260,6 +311,14 @@ def run_tests(self, task_id: str, feature_id: str) -> dict:
                     status=AgentLogStatus.SUCCESS,
                 )
                 db.add(log_pr)
+
+                # ── Phase 8: Send notification ─────────────────
+                NotificationService.notify_pr_created(
+                    str(task.id),
+                    task.title,
+                    pr_result["pr_url"],
+                    pr_result["pr_number"]
+                )
             else:
                 log_pr_fail = AgentLog(
                     agent_type=AgentType.CODING,
@@ -296,6 +355,38 @@ def run_tests(self, task_id: str, feature_id: str) -> dict:
         db.add(log_fail)
         db.commit()
 
+        # ── Phase 8: Circuit breaker check ─────────────────────────
+        should_escalate_now, circuit_info = CircuitBreaker.should_escalate(
+            db,
+            str(task.id),
+            failure_threshold=settings.failure_threshold,
+        )
+
+        if should_escalate_now:
+            # Circuit open - escalate immediately
+            CircuitBreaker.escalate_task(
+                db,
+                str(task.id),
+                f"Agent failed {circuit_info['failure_count']} times. "
+                f"Last error: {bug_report.get('summary', 'Tests failed') if bug_report else 'Tests failed'}"
+            )
+
+            # Send escalation notification
+            NotificationService.notify_task_escalation(
+                str(task.id),
+                task.title,
+                circuit_info['reason'] or "Max retries exceeded"
+            )
+
+            return {
+                "success": False,
+                "error": "Task escalated due to repeated failures",
+                "details": {
+                    "escalated": True,
+                    "failure_count": circuit_info["failure_count"],
+                },
+            }
+
         if feature.retry_count < MAX_RETRY_ATTEMPTS:
             # Attempt self-healing via Coding Agent patch
             patch_and_retry.delay(task_id, feature_id, json.dumps(bug_report or {}))
@@ -320,12 +411,19 @@ def run_tests(self, task_id: str, feature_id: str) -> dict:
             db.add(log_esc)
             db.commit()
 
+            # Send escalation notification
+            NotificationService.notify_task_escalation(
+                str(task.id),
+                task.title,
+                task.escalation_reason
+            )
+
         return {
             "success": False,
             "error": bug_report.get("summary") if bug_report else "Tests failed",
             "details": {
                 "retry_count": feature.retry_count,
-                "escalated": feature.retry_count >= MAX_RETRY_ATTEMPTS,
+                "escalated": feature.retry_count >= MAX_RETRY_ATTEMPTS or should_escalate_now,
             },
         }
 
@@ -519,6 +617,15 @@ def handle_pr_merged(self, task_id: str, pr_number: int) -> dict:
         )
         db.add(log_entry)
         db.commit()
+
+        # ── Phase 8: Send deployment notification ────────────────
+        NotificationService.notify_deployment_complete(
+            str(task.id),
+            task.title,
+            feature.tool_name,
+            f"v{datetime.now(timezone.utc).strftime('%Y%m%d.%H%M%S')}"
+        )
+
         return {"success": True, "error": None}
 
     except Exception as exc:
