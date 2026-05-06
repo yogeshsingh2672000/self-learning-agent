@@ -31,6 +31,8 @@ class Feature(Base, TimestampMixin):
     test_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     test_results: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     pr_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    pr_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    pr_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     status: Mapped[FeatureStatus] = mapped_column(
         SAEnum(FeatureStatus, name="featurestatus"),
         default=FeatureStatus.DEVELOPMENT,

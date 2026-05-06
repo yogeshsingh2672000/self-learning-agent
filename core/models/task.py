@@ -16,6 +16,7 @@ class TaskStatus(str, enum.Enum):
     IN_DEVELOPMENT = "in_development"
     TESTING = "testing"
     IN_REVIEW = "in_review"
+    PENDING_DEPLOYMENT = "pending_deployment"
     DEPLOYED = "deployed"
     REJECTED = "rejected"
     ESCALATED = "escalated"
@@ -43,3 +44,4 @@ class Task(Base, TimestampMixin):
     deployed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    escalation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

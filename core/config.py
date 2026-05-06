@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4"
 
+    # ── GitHub (Phase 6) ─────────────────────────────────────────
+    github_token: str = ""
+    github_repo: str = ""  # format: "owner/repo"
+    github_webhook_secret: str = ""
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):
