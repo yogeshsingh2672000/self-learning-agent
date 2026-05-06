@@ -1,9 +1,17 @@
 """
 Main application entry point - Scalable LangChain agent.
 Demonstrates an agent with pluggable tool system.
+Also serves as ASGI entry point for uvicorn.
 """
 import asyncio
 import argparse
+
+# Import settings first to load .env file
+from core.config import settings
+
+# ── FastAPI App (for uvicorn) ──────────────────────────────────────────────────
+from api.main import app  # Export for uvicorn: uvicorn app:app --reload
+
 from agent import create_search_agent
 from tools import ToolRegistry
 

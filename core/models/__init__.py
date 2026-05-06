@@ -7,6 +7,7 @@ from core.models.feature import Feature, FeatureStatus
 from core.models.approval_log import ApprovalLog, ApprovalDecision
 from core.models.agent_log import AgentLog, AgentType, AgentLogStatus
 from core.models.tool_registry import ToolRegistryEntry
+from core.models.chat_history import ChatHistory, MessageRole
 
 __all__ = [
     "User",
@@ -20,4 +21,6 @@ __all__ = [
     "AgentType",
     "AgentLogStatus",
     "ToolRegistryEntry",
+    "ChatHistory",
+    "MessageRole",
 ]

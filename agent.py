@@ -2,12 +2,12 @@
 LangChain agent for question answering with pluggable tools.
 Uses a scalable tool registry system for easy feature additions.
 """
-import os
 from typing import Optional, List
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 
+from core.config import settings
 from constants import PROVIDERS
 from tools import ToolRegistry
 
@@ -59,20 +59,18 @@ class SearchAgent:
     def _initialize_llm(self, provider: str, temperature: float):
         """Initialize the LLM based on provider type"""
         if provider == "openai":
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY not set in environment")
+            if not settings.openai_api_key:
+                raise ValueError("OPENAI_API_KEY not set in .env file")
             
-            model = os.getenv("OPENAI_MODEL", "gpt-4")
             return ChatOpenAI(
-                api_key=api_key,
-                model=model,
+                api_key=settings.openai_api_key,
+                model=settings.openai_model,
                 temperature=temperature,
                 streaming=False
             )
         else:
             raise NotImplementedError(
-                f"LangChain integration for {provider} not yet implemented. "
+                f"LLM provider {provider} not yet implemented. "
                 "Currently only OpenAI is supported."
             )
     

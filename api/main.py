@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
-from api.routes import auth, health, tasks
+from api.routes import auth, health, tasks, chat
 
 
 @asynccontextmanager
@@ -39,3 +39,4 @@ app.add_middleware(
 app.include_router(health.router)                              # GET /health
 app.include_router(auth.router,  prefix="/api/auth",  tags=["auth"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
+app.include_router(chat.router)                                # POST /api/chat, GET /api/chat/history, etc.
