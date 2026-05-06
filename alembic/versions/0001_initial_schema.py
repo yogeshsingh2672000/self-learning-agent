@@ -19,43 +19,52 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ── ENUM types ────────────────────────────────────────────────────────────
-    taskstatus = postgresql.ENUM(
-        "pending_approval", "approved", "in_development",
-        "testing", "in_review", "deployed", "rejected", "escalated",
-        name="taskstatus",
-    )
-    taskstatus.create(op.get_bind(), checkfirst=True)
-
-    featurestatus = postgresql.ENUM(
-        "development", "testing", "in_review", "deployed", "failed",
-        name="featurestatus",
-    )
-    featurestatus.create(op.get_bind(), checkfirst=True)
-
-    approvaldecision = postgresql.ENUM(
-        "approved", "rejected",
-        name="approvaldecision",
-    )
-    approvaldecision.create(op.get_bind(), checkfirst=True)
-
-    agenttype = postgresql.ENUM(
-        "query", "task_manager", "coding", "testing",
-        name="agenttype",
-    )
-    agenttype.create(op.get_bind(), checkfirst=True)
-
-    agentlogstatus = postgresql.ENUM(
-        "success", "failure", "in_progress",
-        name="agentlogstatus",
-    )
-    agentlogstatus.create(op.get_bind(), checkfirst=True)
-
-    messagerole = postgresql.ENUM(
-        "user", "agent", "system",
-        name="messagerole",
-    )
-    messagerole.create(op.get_bind(), checkfirst=True)
+    # ── ENUM types (idempotent DO blocks) ─────────────────────────────────────
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE taskstatus AS ENUM (
+                'pending_approval', 'approved', 'in_development',
+                'testing', 'in_review', 'deployed', 'rejected', 'escalated'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE featurestatus AS ENUM (
+                'development', 'testing', 'in_review', 'deployed', 'failed'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE approvaldecision AS ENUM ('approved', 'rejected');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE agenttype AS ENUM (
+                'query', 'task_manager', 'coding', 'testing'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE agentlogstatus AS ENUM (
+                'success', 'failure', 'in_progress'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE messagerole AS ENUM ('user', 'agent', 'system');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
 
     # ── users ─────────────────────────────────────────────────────────────────
     op.create_table(
@@ -77,7 +86,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("title", sa.String(500), nullable=False),
         sa.Column("description", sa.Text(), nullable=False),
-        sa.Column("status", sa.Enum(name="taskstatus"), nullable=False,
+        sa.Column("status", postgresql.ENUM(name="taskstatus", create_type=False), nullable=False,
                   server_default="pending_approval"),
         sa.Column("priority_score", sa.Float(), nullable=True),
         sa.Column("acceptance_criteria", sa.Text(), nullable=True),
@@ -102,7 +111,7 @@ def upgrade() -> None:
         sa.Column("test_code", sa.Text(), nullable=True),
         sa.Column("test_results", postgresql.JSON(), nullable=True),
         sa.Column("pr_url", sa.String(500), nullable=True),
-        sa.Column("status", sa.Enum(name="featurestatus"), nullable=False,
+        sa.Column("status", postgresql.ENUM(name="featurestatus", create_type=False), nullable=False,
                   server_default="development"),
         sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("merged_at", sa.DateTime(timezone=True), nullable=True),
@@ -118,7 +127,7 @@ def upgrade() -> None:
         sa.Column("task_id", postgresql.UUID(as_uuid=True),
                   sa.ForeignKey("tasks.id"), nullable=False),
         sa.Column("approver", sa.String(255), nullable=False),
-        sa.Column("decision", sa.Enum(name="approvaldecision"), nullable=False),
+        sa.Column("decision", postgresql.ENUM(name="approvaldecision", create_type=False), nullable=False),
         sa.Column("comment", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -129,12 +138,12 @@ def upgrade() -> None:
     op.create_table(
         "agent_logs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("agent_type", sa.Enum(name="agenttype"), nullable=False),
+        sa.Column("agent_type", postgresql.ENUM(name="agenttype", create_type=False), nullable=False),
         sa.Column("task_id", postgresql.UUID(as_uuid=True),
                   sa.ForeignKey("tasks.id"), nullable=True),
         sa.Column("action", sa.String(500), nullable=False),
         sa.Column("details", postgresql.JSON(), nullable=True),
-        sa.Column("status", sa.Enum(name="agentlogstatus"), nullable=False),
+        sa.Column("status", postgresql.ENUM(name="agentlogstatus", create_type=False), nullable=False),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -161,7 +170,7 @@ def upgrade() -> None:
         sa.Column("user_id", postgresql.UUID(as_uuid=True),
                   sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
         sa.Column("session_id", sa.String(255), nullable=False),
-        sa.Column("role", sa.Enum(name="messagerole"), nullable=False),
+        sa.Column("role", postgresql.ENUM(name="messagerole", create_type=False), nullable=False),
         sa.Column("message", sa.Text(), nullable=False),
         sa.Column("task_id", postgresql.UUID(as_uuid=True),
                   sa.ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True),
