@@ -1,19 +1,15 @@
-# Self-Learning Agent
+# Self-Learning Agent - Scalable Tool-Based Architecture
 
-A Python project that provides a unified interface for interacting with multiple LLM providers and internet search providers.
+A **scalable AI agent** built with LangChain that uses a pluggable tool system. Start with internet search, then easily add new capabilities like calculators, web scrapers, file operations, APIs, and more—all without modifying core agent code.
 
-## Supported LLM Providers
+## Key Architecture
 
-- **OpenAI** - GPT-4, GPT-3.5-Turbo, and other OpenAI models
-- **Anthropic Claude** - Claude 3 (Opus, Sonnet, Haiku)
-- **Google Gemini** - Gemini Pro and other Google models
-
-## Supported Search Providers
-
-- **DuckDuckGo** - Free, no API key required
-- **Google Search** - Via SerpAPI
-- **Bing Search** - Bing Search API
-- **SerpAPI** - Supports multiple search engines (Google, Bing, Baidu, Yahoo, etc.)
+✨ **Pluggable Tools** - Add tools without touching agent code  
+🔧 **Auto-Discovery** - Tools are automatically loaded and registered  
+📦 **Modular Design** - Each tool is independent and composable  
+🚀 **Scalable** - From 1 tool to 100+ tools, architecture stays clean  
+🧠 **Intelligent Selection** - LLM decides which tools to use  
+💬 **Interactive & Programmatic** - Use via CLI or Python API
 
 ## Installation
 
@@ -45,277 +41,202 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-2. Add your API keys to `.env`:
+2. Add your OpenAI API key to `.env`:
 
 ```
 OPENAI_API_KEY=your_key_here
-ANTHROPIC_API_KEY=your_key_here
-GOOGLE_API_KEY=your_key_here
+OPENAI_MODEL=gpt-4
 ```
 
-3. (Optional) Customize generation parameters in `.env`
+3. (Optional) Customize generation parameters in `.env`:
+
+```
+GENERATION_TEMPERATURE=0.7
+GENERATION_MAX_TOKENS=2000
+```
 
 ## Usage
 
-### Basic Usage
+### Interactive Mode (Default)
 
-```python
-import asyncio
-from config import Config
+Run the agent in interactive conversation mode:
 
-async def main():
-    config = Config()
-
-    # List available providers
-    print(config.list_providers())  # ['openai', 'anthropic', 'gemini']
-
-    # Get a specific provider
-    provider = config.get_provider('openai')
-
-    # Generate text
-    response = await provider.generate("What is AI?")
-    print(response)
-
-asyncio.run(main())
+```bash
+python app.py
 ```
 
-### Using Different Providers
+Then ask questions naturally:
 
-```python
-# Use OpenAI
-openai_provider = config.get_provider('openai')
-response = await openai_provider.generate("Hello!")
+```
+You: What are the latest developments in AI?
+Agent: [Agent searches internet and answers...]
 
-# Use Anthropic Claude
-claude_provider = config.get_provider('anthropic')
-response = await claude_provider.generate("Hello!")
-
-# Use Google Gemini
-gemini_provider = config.get_provider('gemini')
-response = await gemini_provider.generate("Hello!")
+You: How does machine learning work?
+Agent: [Agent provides comprehensive answer...]
 ```
 
-### Search Usage
+### Single Query Mode
 
-```python
-import asyncio
-from search import search, get_providers
+Get a quick answer without interactive mode:
 
-async def main():
-    # List available search providers
-    print(get_providers())  # ['ddg', 'google_search', ...]
-
-    # Search with DuckDuckGo (free, default)
-    results = await search("machine learning", provider="ddg", num_results=5)
-
-    for result in results:
-        print(f"Title: {result.title}")
-        print(f"URL: {result.url}")
-        print(f"Description: {result.description}\n")
-
-    # Search with Google (requires SerpAPI key)
-    results = await search("AI algorithms", provider="google_search", num_results=10)
-
-    # Search with Bing (requires Bing Search API key)
-    results = await search("neural networks", provider="bing_search")
-
-asyncio.run(main())
+```bash
+python app.py -q "What is quantum computing?"
 ```
 
-### Advanced Search Example
+### Advanced Usage
+
+#### Use Different LLM Models
+
+```bash
+# Use GPT-3.5-Turbo with verbose logging
+python app.py -v
+
+# Non-interactive mode
+python app.py -q "Your question here"
+
+# Interactive mode explicitly
+python app.py -i
+```
+
+#### Python API
 
 ```python
-import asyncio
-from search import SearchManager
+from agent import create_search_agent
 
-async def main():
-    search_manager = SearchManager()
+# Create agent
+agent = create_search_agent(
+    llm_provider="openai",
+    temperature=0.7,
+    verbose=True
+)
 
-    # Get available providers
-    print(search_manager.list_providers())
+# Ask a question
+response = agent.answer("What is machine learning?")
+print(response)
 
-    # Search using a specific provider
-    results = await search_manager.search(
-        query="Python web frameworks",
-        provider="ddg",
+# Interactive conversation
+agent.run_interactive()
+```
+
+#### Persistent Conversation
+
+```python
+from agent import create_search_agent
+from langchain_core.messages import HumanMessage, AIMessage
+
+agent = create_search_agent()
+
+# Build conversation history
+chat_history = []
+
+# First question
+response1 = agent.answer("What is Python?", chat_history)
+chat_history.append(HumanMessage(content="What is Python?"))
+chat_history.append(AIMessage(content=response1))
+
+# Follow-up question (agent remembers context)
+response2 = agent.answer("What can I build with it?", chat_history)
+```
+
+### Command Line Options
+
+```
+-q, --query       Single query to answer (non-interactive)
+-l, --llm         LLM provider: openai (default)
+-v, --verbose     Show agent reasoning and tool usage
+-i, --interactive Force interactive mode (default if no query)
+```
+
+### Example Queries
+
+```
+Scientific Questions:
+- "What are the latest breakthroughs in quantum computing?"
+- "How does photosynthesis work?"
+- "Explain CRISPR gene editing in simple terms"
+
+Technology:
+- "What are the top programming languages in 2024?"
+- "Differences between machine learning and deep learning"
+- "Best practices for microservices architecture"
+
+Current Events:
+- "Latest developments in AI"
+- "Recent space exploration news"
+- "Major tech industry acquisitions"
+
+General Knowledge:
+- "Benefits of regular exercise"
+- "How to learn a new language"
+- "History of the internet"
 ```
 
 ## Architecture
 
-### Single Source of Truth
+### Agent Design
 
-**`constants.py`** is the central source of truth for:
+The agent uses **LangChain's tool-calling agent** to implement a reasoning loop:
 
-- Provider metadata (API key env vars, model env vars, default models)
-- Default configuration parameters (temperature, max_tokens, etc.)
+1. **Input** - User query
+2. **Planning** - LLM decides whether to search
+3. **Tool Use** - Executes DuckDuckGo search if needed
+4. **Processing** - Synthesizes results
+5. **Output** - Comprehensive answer
 
-All other files import from `constants.py` to avoid duplication and ensure consistency.
+### Components
 
-### Base Classes
-
-- **`LLMConfig`** - Configuration dataclass with common parameters (temperature, max_tokens, etc.)
-- **`LLMProvider`** - Abstract base class for all LLM providers
-
-### Provider Implementations
-
-- **`OpenAIProvider`** - OpenAI API integration
-- **`AnthropicProvider`** - Anthropic Claude API integration
-- **`GeminiProvider`** - Google Gemini API integration
+- **`agent.py`** - Core SearchAgent class using LangChain
+- **`app.py`** - CLI interface (argparse)
+- **`constants.py`** - Central configuration (single source of truth)
 
 ## Project Structure
 
 ```
 self-learning-agent/
-├── app.py              # Example application
-├── config.py           # LLM configuration management
-├── search.py           # Search functionality
-├── constants.py        # Single source of truth for defaults & metadata
-├── requirements.txt    # Python dependencies
-├── .env.example        # Environment variables template
-├── README.md           # This file
-├── llm/
-│   ├── __init__.py     # Package initialization
-│   ├── base.py         # Base classes
-│   ├── open_ai.py      # OpenAI provider
-│   ├── anthropic.py    # Anthropic Claude provider
-│   └── gemini.py       # Google Gemini provider
-└── search_providers/
-    ├── __init__.py     # Package initialization
-    ├── base.py         # SearchProvider base class
-    ├── google.py       # Google Search provider
-    ├── duckduckgo.py   # DuckDuckGo (ddg) provider
-    ├── bing.py         # Bing Search provider
-    └── serpapi.py      # SerpAPI provider
+├── app.py                  # Main entry point (CLI)
+├── agent.py                # SearchAgent class (LangChain integration)
+├── constants.py            # Central configuration
+├── guide.py                # Quick start guide
+├── requirements.txt        # Python dependencies
+├── .env.example            # Environment variables template
+├── README.md               # This file
+└── .git/                   # Version control
 ```
 
 ## Environment Variables
 
 ### LLM Configuration
 
-| Variable                        | Description                      | Example                  |
-| ------------------------------- | -------------------------------- | ------------------------ |
-| `OPENAI_API_KEY`                | OpenAI API key                   | `sk-...`                 |
-| `OPENAI_MODEL`                  | OpenAI model to use              | `gpt-4`                  |
-| `ANTHROPIC_API_KEY`             | Anthropic API key                | `sk-ant-...`             |
-| `ANTHROPIC_MODEL`               | Anthropic model to use           | `claude-3-opus-20240229` |
-| `GOOGLE_API_KEY`                | Google API key                   | `AIza...`                |
-| `GOOGLE_MODEL`                  | Google model to use              | `gemini-pro`             |
-| `GENERATION_TEMPERATURE`        | Temperature for generation (0-1) | `0.1`                    |
-| `GENERATION_MAX_TOKENS`         | Max tokens to generate           | `2000`                   |
-| `GENERATION_TOP_P`              | Top-p sampling parameter         | `0.9`                    |
-| `GENERATION_MAX_CONTEXT_LENGTH` | Max context length               | `8000`                   |
+| Variable                 | Description                      | Example  |
+| ------------------------ | -------------------------------- | -------- |
+| `OPENAI_API_KEY`         | OpenAI API key                   | `sk-...` |
+| `OPENAI_MODEL`           | OpenAI model to use              | `gpt-4`  |
+| `GENERATION_TEMPERATURE` | Temperature for generation (0-1) | `0.7`    |
+| `GENERATION_MAX_TOKENS`  | Max tokens to generate           | `2000`   |
 
-### Search Configuration
-
-| Variable              | Description                        | Example      |
-| --------------------- | ---------------------------------- | ------------ |
-| `SERPAPI_API_KEY`     | SerpAPI key for Google/Bing/etc    | `0987654...` |
-| `BING_SEARCH_API_KEY` | Bing Search API key                | `0987654...` |
-| (DuckDuckGo - ddg)   | No API key required for DuckDuckGo | N/A          |
-
-## Running the Example
+## Running the Agent
 
 ```bash
 python app.py
 ```
 
-## Development
+## Design Principles
 
-### Adding a New LLM Provider
+- **Simplicity First**: Uses LangChain's built-in tools and integrations
+- **Single Source of Truth**: Configuration centralized in `constants.py`
+- **No Custom Search Providers**: Leverages LangChain's DuckDuckGo integration
+- **OpenAI Focused**: Optimized for OpenAI models (can be extended to others)
 
-To maintain the single source of truth, follow these steps:
+## Future Enhancements
 
-1. **Add provider metadata to `constants.py`**:
+Possible extensions to the agent:
 
-   ```python
-   PROVIDERS = {
-       "new_provider": {
-           "name": "Provider Name",
-           "api_key_env": "NEW_PROVIDER_API_KEY",
-           "model_env": "NEW_PROVIDER_MODEL",
-           "default_model": "model-name",
-           "description": "Provider description",
-       },
-       ...
-   }
-   ```
-
-2. **Create provider class** in `llm/new_provider.py` implementing `LLMProvider`
-
-3. **Export in `llm/__init__.py`**:
-
-   ```python
-   from .new_provider import NewProviderClass
-   __all__ = [..., "NewProviderClass"]
-   ```
-
-4. **Add to `config.py`** in the `provider_classes` dict:
-
-   ```python
-   provider_classes = {
-       ...
-       "new_provider": NewProviderClass,
-   }
-   ```
-
-5. **Update `.env.example`** with new environment variables (referencing `constants.py`)
-
-6. **Update `README.md`** with new provider information
-
-### Adding a New Search Provider
-
-1. **Add provider metadata to `constants.py`** in `SEARCH_PROVIDERS`:
-
-   ```python
-   SEARCH_PROVIDERS = {
-       "new_search": {
-           "name": "New Search Provider",
-           "api_key_env": "NEW_SEARCH_API_KEY",
-           "class_name": "NewSearchProvider",
-           "description": "Description of the provider",
-       },
-       ...
-   }
-   ```
-
-2. **Create provider class** in `search_providers/new_search.py` implementing `SearchProvider`:
-
-   ```python
-   from .base import SearchProvider, SearchResult
-
-   class NewSearchProvider(SearchProvider):
-       async def search(self, query: str, num_results: int = 10) -> List[SearchResult]:
-           # Implementation here
-           pass
-
-       def validate_api_key(self) -> bool:
-           return bool(self.api_key)
-   ```
-
-3. **Export in `search_providers/__init__.py`**:
-
-   ```python
-   from .new_search import NewSearchProvider
-   __all__ = [..., "NewSearchProvider"]
-   ```
-
-4. **Register in `search.py`** in the `provider_classes` dict:
-
-   ```python
-   provider_classes = {
-       ...
-       "new_search": NewSearchProvider,
-   }
-   ```
-
-5. **Update `.env.example`** and `README.md`
-
-### Design Principles
-
-- **Single Source of Truth**: All defaults, provider metadata, and configuration are defined in `constants.py`
-- **DRY (Don't Repeat Yourself)**: Import from constants rather than hardcoding values
-- **Easy to Extend**: Adding a new provider requires minimal changes across files
-- **Async-First**: All search and LLM operations are async for better performance
+- Add more LLM providers (Anthropic Claude, Google Gemini via LangChain)
+- Add more search tools (Tavily, SerpAPI via LangChain)
+- Persistent memory/conversation storage
+- Web API endpoint
+- Multi-turn conversation persistence
+- Custom system prompts and configurations
 
 ## License
 

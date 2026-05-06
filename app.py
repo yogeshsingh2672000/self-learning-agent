@@ -1,130 +1,104 @@
 """
-Example application demonstrating LLM and Search providers.
+Main application entry point - Scalable LangChain agent.
+Demonstrates an agent with pluggable tool system.
 """
 import asyncio
-
-from config import Config
-from search import search, get_providers as get_search_providers
-from constants import PROVIDERS, SEARCH_PROVIDERS
-
-
-async def demo_llm():
-    """Demonstrate LLM providers"""
-    print("=" * 60)
-    print("LLM PROVIDERS DEMO")
-    print("=" * 60)
-    
-    config = Config()
-    available_providers = config.list_providers()
-    print(f"\nAvailable LLM providers: {available_providers}")
-    
-    if not available_providers:
-        print("\nNo LLM providers configured. Please set API keys in .env file:")
-        for provider_key, provider_info in PROVIDERS.items():
-            api_key = provider_info["api_key_env"]
-            print(f"  - {api_key} for {provider_info['name']}")
-        return
-    
-    # Use the first available provider
-    provider_name = available_providers[0]
-    provider = config.get_provider(provider_name)
-    
-    prompt = "Explain machine learning in one sentence."
-    
-    try:
-        print(f"\nUsing provider: {provider_name}")
-        print(f"Prompt: {prompt}")
-        response = await provider.generate(prompt)
-        print(f"Response: {response}")
-    except Exception as e:
-        print(f"Error: {e}")
-
-
-async def demo_search():
-    """Demonstrate Search providers"""
-    print("\n" + "=" * 60)
-    print("SEARCH PROVIDERS DEMO")
-    print("=" * 60)
-    
-    available_providers = get_search_providers()
-    print(f"\nAvailable search providers: {available_providers}")
-    
-    if not available_providers:
-        print("No search providers available!")
-        return
-    
-    # Use DuckDuckGo (always available)
-    query = "artificial intelligence"
-    provider = "duckduckgo"
-    
-    try:
-        print(f"\nSearching: '{query}'")
-        print(f"Provider: {provider}")
-        print("\nResults:")
-        print("-" * 60)
-        
-        results = await search(query, provider=provider, num_results=3)
-        
-        for result in results:
-            print(f"\n{result.position}. {result.title}")
-            print(f"   URL: {result.url}")
-            print(f"   Description: {result.description[:100]}...")
-    except Exception as e:
-        print(f"Error: {e}")
-
-
-async def demo_integrated():
-    """Demonstrate integrated LLM + Search usage"""
-    print("\n" + "=" * 60)
-    print("INTEGRATED LLM + SEARCH DEMO")
-    print("=" * 60)
-    
-    config = Config()
-    llm_providers = config.list_providers()
-    search_providers = get_search_providers()
-    
-    if not llm_providers or not search_providers:
-        print("Missing providers. Configure API keys in .env file.")
-        return
-    
-    # Search for information
-    query = "Python asyncio"
-    print(f"\nSearching for: '{query}'")
-    
-    try:
-        search_results = await search(query, provider="duckduckgo", num_results=2)
-        
-        # Use LLM to summarize first result
-        if search_results:
-            first_result = search_results[0]
-            llm_provider = config.get_provider(llm_providers[0])
-            
-            summary_prompt = f"Summarize this in 2 sentences: {first_result.description}"
-            print(f"\nUsing {llm_providers[0]} to summarize search result...")
-            
-            summary = await llm_provider.generate(summary_prompt)
-            print(f"\nSummary: {summary}")
-    except Exception as e:
-        print(f"Error: {e}")
+import argparse
+from agent import create_search_agent
+from tools import ToolRegistry
 
 
 async def main():
-    """Main demonstration function"""
-    print("\n")
-    print("╔" + "=" * 58 + "╗")
-    print("║" + " " * 58 + "║")
-    print("║" + "  SELF-LEARNING AGENT - LLM & SEARCH DEMO".center(58) + "║")
-    print("║" + " " * 58 + "║")
-    print("╚" + "=" * 58 + "╝")
+    """Main application"""
+    parser = argparse.ArgumentParser(
+        description="Scalable AI Agent - Ask questions and use available tools"
+    )
+    parser.add_argument(
+        "-q", "--query",
+        type=str,
+        help="Single query to answer and exit"
+    )
+    parser.add_argument(
+        "-l", "--llm",
+        type=str,
+        default="openai",
+        help="LLM provider (openai)"
+    )
+    parser.add_argument(
+        "-t", "--tools",
+        type=str,
+        help="Comma-separated list of tools to enable (e.g., 'search_internet')"
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose logging"
+    )
+    parser.add_argument(
+        "-i", "--interactive",
+        action="store_true",
+        help="Run in interactive mode"
+    )
+    parser.add_argument(
+        "--list-tools",
+        action="store_true",
+        help="List all available tools and exit"
+    )
     
-    await demo_llm()
-    await demo_search()
-    await demo_integrated()
+    args = parser.parse_args()
     
-    print("\n" + "=" * 60)
-    print("DEMO COMPLETED")
-    print("=" * 60 + "\n")
+    # If user requested tool list, show and exit
+    if args.list_tools:
+        registry = ToolRegistry()
+        registry.print_tools_info()
+        return
+    
+    # Banner
+    print("\n" + "=" * 70)
+    print(" " * 15 + "SCALABLE AI AGENT")
+    print("=" * 70)
+    print(f"LLM Provider: {args.llm}")
+    
+    # Parse enabled tools
+    enabled_tools = None
+    if args.tools:
+        enabled_tools = [t.strip() for t in args.tools.split(",")]
+        print(f"Tools: {', '.join(enabled_tools)}")
+    else:
+        print("Tools: All available tools enabled")
+    
+    print("=" * 70 + "\n")
+    
+    # Create agent
+    try:
+        agent = create_search_agent(
+            llm_provider=args.llm,
+            temperature=0.7,
+            verbose=args.verbose,
+            enabled_tools=enabled_tools
+        )
+    except Exception as e:
+        print(f"Error initializing agent: {e}")
+        return
+    
+    # Run query or interactive mode
+    if args.query:
+        # Single query mode
+        print(f"Query: {args.query}\n")
+        response = agent.answer(args.query)
+        print(f"Answer:\n{response}\n")
+    elif args.interactive:
+        # Interactive mode
+        agent.run_interactive()
+    else:
+        # Default: run in interactive mode
+        agent.run_interactive()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user.")
+    except Exception as e:
+        print(f"\nError: {e}")
