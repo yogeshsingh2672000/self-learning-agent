@@ -681,3 +681,91 @@ def get_pr_status(
         "merged": feature.pr_status == "merged",
     }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 7: Deployment and Rollback Endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/admin/deployments", summary="List deployed tools (Phase 7)")
+def list_deployments(
+    current_user: Annotated[User, Depends(get_current_admin)],
+    db: Session = Depends(get_db),
+):
+    """
+    List all deployed tools with their current versions and deployment timestamps.
+
+    Returns:
+        {
+            success: bool,
+            tools: [
+                {tool_name, version, deployed_at, previous_version, created_at},
+                ...
+            ],
+            count: int
+        }
+    """
+    from core.deployment_manager import DeploymentManager
+
+    result = DeploymentManager.list_deployed_tools(db)
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return result
+
+
+@router.get("/admin/deployments/{tool_name}", summary="Get deployment history for a tool (Phase 7)")
+def get_deployment_history(
+    tool_name: str,
+    current_user: Annotated[User, Depends(get_current_admin)],
+    db: Session = Depends(get_db),
+):
+    """
+    Get detailed deployment history for a specific tool.
+
+    Returns:
+        {
+            tool_name: str,
+            current_version: str,
+            deployed_at: datetime,
+            previous_version: str | None,
+            created_at: datetime,
+            updated_at: datetime
+        }
+    """
+    from core.deployment_manager import DeploymentManager
+
+    result = DeploymentManager.get_deployment_history(db, tool_name)
+    if not result["success"]:
+        raise HTTPException(status_code=404, detail=result["error"])
+
+    return result
+
+
+@router.post("/admin/deployments/{tool_name}/rollback", summary="Rollback a tool to previous version (Phase 7)")
+def rollback_tool(
+    tool_name: str,
+    current_user: Annotated[User, Depends(get_current_admin)],
+    db: Session = Depends(get_db),
+):
+    """
+    Rollback a deployed tool to its previous version.
+
+    Admin only — triggered manually on Grafana dashboard or CLI.
+
+    Returns:
+        {
+            success: bool,
+            tool_name: str,
+            rolled_back_to: str (new version),
+            previous_version: str (old version),
+            error?: str
+        }
+    """
+    from core.deployment_manager import DeploymentManager
+
+    result = DeploymentManager.rollback_tool(db, tool_name, str(current_user.id))
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return result
+

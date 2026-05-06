@@ -6,8 +6,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from core.config import settings
+from core.metrics import REGISTRY
 from api.routes import auth, health, tasks, chat
 
 
@@ -40,3 +43,15 @@ app.include_router(health.router)                              # GET /health
 app.include_router(auth.router,  prefix="/api/auth",  tags=["auth"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(chat.router)                                # POST /api/chat, GET /api/chat/history, etc.
+
+# ── Prometheus Metrics (Phase 7) ──────────────────────────────────────────────
+@app.get("/metrics", tags=["monitoring"])
+async def metrics():
+    """
+    Prometheus metrics endpoint for monitoring.
+
+    Returns metrics in Prometheus text format.
+    Exposes: queries answered, gaps detected, tasks created, tools deployed, test results.
+    """
+    return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
+
