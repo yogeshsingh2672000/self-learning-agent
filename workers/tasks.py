@@ -211,9 +211,6 @@ def generate_tool_code(self, task_id: str) -> dict:
 
 # ── Phase 5 tasks ─────────────────────────────────────────────────────────────
 
-MAX_RETRY_ATTEMPTS = 3
-
-
 @celery_app.task(name="workers.tasks.run_tests", bind=True, max_retries=1)
 def run_tests(self, task_id: str, feature_id: str, requirements_json: str = "[]") -> dict:
     """
@@ -346,6 +343,44 @@ def run_tests(self, task_id: str, feature_id: str, requirements_json: str = "[]"
         db.add(log_fail)
         db.commit()
 
+        # ── Check: Stuck on same error for 3+ retries ────────────────
+        # If the same error repeats 3 times, stop retrying and escalate
+        current_error_summary = bug_report.get("summary", "Unknown") if bug_report else "Unknown"
+        
+        # Initialize error history in test_results if needed
+        if not feature.test_results:
+            feature.test_results = {}
+        if "error_history" not in feature.test_results:
+            feature.test_results["error_history"] = []
+        
+        error_history = feature.test_results.get("error_history", [])
+        error_history.append(current_error_summary)
+        feature.test_results["error_history"] = error_history
+        
+        # Check if last 3 errors are all the same (stuck on same error)
+        same_error_count = 0
+        if len(error_history) >= 3:
+            # Check last 3 errors
+            last_three = error_history[-3:]
+            if last_three[0] == last_three[1] == last_three[2]:
+                same_error_count = 3
+                
+                log_stuck = AgentLog(
+                    agent_type=AgentType.TESTING,
+                    task_id=task.id,
+                    action="run_tests_stuck_on_error",
+                    details={
+                        "error": current_error_summary,
+                        "error_count": same_error_count,
+                        "retry_count": feature.retry_count,
+                        "error_history": error_history,
+                    },
+                    status=AgentLogStatus.FAILURE,
+                    error_message=f"Stuck on same error for 3 attempts: {current_error_summary}",
+                )
+                db.add(log_stuck)
+                db.commit()
+        
         # ── Phase 8: Circuit breaker check ─────────────────────────
         should_escalate_now, circuit_info = CircuitBreaker.should_escalate(
             db,
@@ -353,7 +388,7 @@ def run_tests(self, task_id: str, feature_id: str, requirements_json: str = "[]"
             failure_threshold=settings.failure_threshold,
         )
 
-        if should_escalate_now:
+        if should_escalate_now or same_error_count >= 3:
             # Circuit open - escalate immediately
             CircuitBreaker.escalate_task(
                 db,
@@ -378,7 +413,49 @@ def run_tests(self, task_id: str, feature_id: str, requirements_json: str = "[]"
                 },
             }
 
-        if feature.retry_count < MAX_RETRY_ATTEMPTS:
+        # ── If stuck on same error for 3 retries → escalate immediately ────
+        if same_error_count >= 3:
+            task.status = TaskStatus.ESCALATED
+            task.escalation_reason = (
+                f"Stuck on same error for 3 attempts. "
+                f"Error: {current_error_summary}"
+            )
+            feature.status = FeatureStatus.FAILED
+            
+            log_stuck_esc = AgentLog(
+                agent_type=AgentType.TESTING,
+                task_id=task.id,
+                action="task_escalated_stuck_error",
+                details={
+                    "reason": task.escalation_reason,
+                    "error": current_error_summary,
+                    "retry_count": feature.retry_count,
+                },
+                status=AgentLogStatus.FAILURE,
+                error_message=task.escalation_reason,
+            )
+            db.add(log_stuck_esc)
+            db.commit()
+
+            # Send escalation notification
+            NotificationService.notify_task_escalation(
+                str(task.id),
+                task.title,
+                task.escalation_reason
+            )
+
+            return {
+                "success": False,
+                "error": f"Stuck on error: {current_error_summary}",
+                "details": {
+                    "escalated": True,
+                    "reason": "same_error_3_times",
+                    "error_history": error_history,
+                },
+            }
+
+        # ── If not stuck → try patching again (if retries left) ────
+        if feature.retry_count < settings.failure_threshold:
             # Attempt self-healing via Coding Agent patch
             patch_and_retry.delay(
                 task_id, feature_id, json.dumps(bug_report or {}), 
@@ -388,7 +465,7 @@ def run_tests(self, task_id: str, feature_id: str, requirements_json: str = "[]"
             # Max retries exceeded — escalate to human
             task.status = TaskStatus.ESCALATED
             task.escalation_reason = (
-                f"Tests failed after {MAX_RETRY_ATTEMPTS} attempts. "
+                f"Tests failed after {settings.failure_threshold} attempts. "
                 f"Last error: {bug_report.get('summary', 'Unknown') if bug_report else 'Unknown'}"
             )
             log_esc = AgentLog(
@@ -417,7 +494,7 @@ def run_tests(self, task_id: str, feature_id: str, requirements_json: str = "[]"
             "error": bug_report.get("summary") if bug_report else "Tests failed",
             "details": {
                 "retry_count": feature.retry_count,
-                "escalated": feature.retry_count >= MAX_RETRY_ATTEMPTS or should_escalate_now,
+                "escalated": feature.retry_count >= settings.failure_threshold or should_escalate_now or same_error_count >= 3,
             },
         }
 
@@ -592,7 +669,7 @@ def patch_and_retry(self, task_id: str, feature_id: str, bug_report_json: str, r
     """
     Celery task: Patch tool code based on a Testing Agent bug report, then re-run tests.
 
-    Called when run_tests fails and retry_count < MAX_RETRY_ATTEMPTS.
+    Called when run_tests fails and retry_count < settings.failure_threshold.
     """
     db = SessionLocal()
     try:

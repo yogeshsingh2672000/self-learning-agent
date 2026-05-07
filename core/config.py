@@ -2,14 +2,20 @@
 Central settings for the platform, loaded from environment / .env file.
 Single source of truth for all runtime configuration.
 """
+import os
+from pathlib import Path
 from typing import List, Union
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 
+# Get the absolute path to the .env file (in the backend directory)
+BASE_DIR = Path(__file__).parent.parent
+ENV_FILE = BASE_DIR / ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -52,7 +58,7 @@ class Settings(BaseSettings):
     cost_alert_threshold: float = 0.8  # Alert at 80% of budget
 
     # Circuit Breaker
-    failure_threshold: int = 3  # Escalate after N failures
+    failure_threshold: int = 4  # Escalate after N failures (read from FAILURE_THRESHOLD in .env)
     
     # Notifications (Phase 8)
     enable_email_notifications: bool = False
