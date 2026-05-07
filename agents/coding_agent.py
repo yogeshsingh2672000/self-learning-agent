@@ -62,49 +62,80 @@ class ToolCodeGenerator:
 
         criteria_str = "\n".join(f"   - {c}" for c in acceptance_criteria)
 
-        prompt = f"""Generate a complete Python tool that implements the BaseTool interface.
+        prompt = f"""Generate a production-ready Python tool that implements the BaseTool interface.
 
 TOOL NAME: {tool_name}
+TOOL CLASS: {tool_class}
 DESCRIPTION: {task_description}
 
 REQUIREMENTS (acceptance criteria):
 {criteria_str}
 
-Generate ONLY valid Python code with no markdown. The tool MUST:
-1. Import from tools.base import BaseTool, ToolConfig
-2. Implement a class named {tool_class} inheriting from BaseTool
-3. Implement get_config() returning ToolConfig with name="{tool_name}"
-4. Implement execute() returning a LangChain Tool object
-5. Include comprehensive docstrings
-6. Handle errors gracefully
+Generate ONLY valid Python code with NO markdown blocks. The tool implementation MUST:
+1. Start with a comprehensive module docstring explaining purpose and usage
+2. Include all necessary imports (typing, logging, etc.)
+3. Implement class {tool_class} inheriting from BaseTool
+4. Implement get_config() returning ToolConfig with proper name, description, and category
+5. Implement execute() returning a LangChain Tool object with proper error handling
+6. Include comprehensive docstrings for all methods and parameters
+7. Implement proper error handling and logging
+8. Include type hints for all parameters and return values
+9. Add a __version__ constant at module level
 
-Example structure:
+The generated code should be professional, well-documented, and production-ready.
+
+Example structure to follow:
 ```python
-from tools.base import BaseTool, ToolConfig
+\"\"\"
+{task_description}
+
+This module provides the {tool_class} tool implementation.
+\"\"\"
+import logging
+from typing import Optional, Dict, Any
 from langchain_core.tools import Tool
-from typing import Optional
+
+from tools.base import BaseTool, ToolConfig
+
+logger = logging.getLogger(__name__)
+__version__ = "1.0.0"
 
 class {tool_class}(BaseTool):
+    \"\"\"Implements {task_description}.\"\"\"
+    
+    def __init__(self):
+        \"\"\"Initialize the {tool_class} tool.\"\"\"
+        super().__init__()
+        logger.info(f"Initialized {tool_class} v{{__version__}}")
+    
     def get_config(self) -> ToolConfig:
+        \"\"\"Return tool configuration.\"\"\"
         return ToolConfig(
             name="{tool_name}",
-            description="...",
-            category="category"
+            description="{task_description}",
+            category="integration"
         )
     
     def execute(self) -> Tool:
-        def tool_func(input_param: str) -> str:
-            # Implementation
-            return "result"
+        \"\"\"Execute the tool and return LangChain Tool object.\"\"\"
+        def tool_func(input_param: str) -> Dict[str, Any]:
+            \"\"\"Execute tool logic.\"\"\"
+            try:
+                # Implementation here
+                result = {{"success": True, "result": None}}
+                return result
+            except Exception as e:
+                logger.error(f"Error: {{e}}", exc_info=True)
+                return {{"success": False, "error": str(e)}}
         
         return Tool(
             name="{tool_name}",
             func=tool_func,
-            description="..."
+            description="{task_description}"
         )
 ```
 
-Generate the complete implementation now:
+Generate the complete, production-ready implementation:
 """
 
         try:
@@ -196,7 +227,7 @@ class TestCodeGenerator:
         """Generate pytest-compatible test code."""
         criteria_str = "\n".join(f"   - {c}" for c in acceptance_criteria)
 
-        prompt = f"""Generate comprehensive pytest test cases for a tool.
+        prompt = f"""Generate comprehensive, production-ready pytest test cases for a tool.
 
 TOOL CLASS: {tool_class}
 TOOL NAME: {tool_name}
@@ -205,35 +236,84 @@ DESCRIPTION: {tool_description}
 ACCEPTANCE CRITERIA:
 {criteria_str}
 
-Generate ONLY valid Python code with no markdown. The tests MUST:
-1. Import pytest and the tool class
-2. Test all requirements from acceptance criteria
-3. Use fixtures for tool initialization
-4. Include both happy path and error cases
-5. Have descriptive test names
-6. Include docstrings
+Generate ONLY valid Python code with NO markdown blocks. The test suite MUST:
+1. Have a clear module docstring explaining what is tested
+2. Import pytest, logging, and the tool class
+3. Include proper test fixtures for tool initialization
+4. Test all acceptance criteria requirements
+5. Include both happy path and error case tests
+6. Use descriptive test function names following test_<feature>_<scenario> pattern
+7. Include comprehensive docstrings for each test
+8. Use assertions with clear, descriptive messages
+9. Include setup and teardown where appropriate
+10. Test logging and error handling
 
-Example structure:
+The test file should be well-organized with:
+- Module header and imports
+- Fixtures section
+- Test class or grouped test functions
+- Clear separation between happy path and error tests
+
+Example structure to follow:
 ```python
+\"\"\"
+Test suite for {tool_class} tool.
+
+Tests cover:
+- Tool initialization and configuration
+- Execute method functionality
+- Error handling and edge cases
+\"\"\"
 import pytest
+import logging
 from tools.{tool_name} import {tool_class}
+
+logger = logging.getLogger(__name__)
 
 @pytest.fixture
 def tool():
+    \"\"\"Fixture to provide a {tool_class} instance.\"\"\"
     return {tool_class}()
 
-def test_tool_config(tool):
-    config = tool.get_config()
-    assert config.name == "{tool_name}"
-    assert config.enabled is True
+class TestToolConfiguration:
+    \"\"\"Test tool configuration and initialization.\"\"\"
+    
+    def test_tool_initialization(self, tool):
+        \"\"\"Test that tool initializes without errors.\"\"\"
+        assert tool is not None
+    
+    def test_tool_config(self, tool):
+        \"\"\"Test tool configuration is correct.\"\"\"
+        config = tool.get_config()
+        assert config.name == "{tool_name}"
+        assert config.enabled is True
 
-def test_tool_execute(tool):
-    tool_obj = tool.execute()
-    assert tool_obj is not None
-    assert tool_obj.name == "{tool_name}"
+class TestToolExecution:
+    \"\"\"Test tool execution and functionality.\"\"\"
+    
+    def test_execute_returns_tool(self, tool):
+        \"\"\"Test that execute returns a LangChain Tool object.\"\"\"
+        tool_obj = tool.execute()
+        assert tool_obj is not None
+        assert tool_obj.name == "{tool_name}"
+    
+    def test_tool_execution_success(self, tool):
+        \"\"\"Test successful tool execution.\"\"\"
+        tool_obj = tool.execute()
+        result = tool_obj.invoke({{}})
+        assert result is not None
+
+class TestErrorHandling:
+    \"\"\"Test error handling and edge cases.\"\"\"
+    
+    def test_invalid_input_handling(self, tool):
+        \"\"\"Test tool handles invalid inputs gracefully.\"\"\"
+        tool_obj = tool.execute()
+        result = tool_obj.invoke(None)
+        assert result is not None
 ```
 
-Generate the complete test suite now:
+Generate the complete, production-ready test suite:
 """
 
         try:
@@ -331,8 +411,25 @@ class CodingAgent:
         self.git = GitOperations()
 
     def _sanitize_name(self, name: str) -> str:
-        """Convert title to valid Python name."""
-        return re.sub(r"[^a-z0-9_]", "_", name.lower())
+        """Convert title to valid Python name with better structure."""
+        # Remove common phrases
+        clean_name = name.lower()
+        for phrase in ["implement ", "create ", "add ", "build ", "tool", "integration", "with"]:
+            clean_name = clean_name.replace(phrase, "")
+        
+        # Replace non-alphanumeric with underscore
+        clean_name = re.sub(r"[^a-z0-9_\s]", "", clean_name).strip()
+        # Replace spaces with underscores and collapse multiple underscores
+        clean_name = re.sub(r"\s+", "_", clean_name)
+        clean_name = re.sub(r"_+", "_", clean_name)
+        clean_name = clean_name.strip("_")
+        
+        # Keep it reasonable length (max 40 chars for readability)
+        if len(clean_name) > 40:
+            words = clean_name.split("_")
+            clean_name = "_".join(words[:5])
+        
+        return clean_name or "tool"
 
     def _get_class_name(self, tool_name: str) -> str:
         """Convert tool_name to CamelCase class name."""
@@ -396,6 +493,8 @@ class CodingAgent:
                 "tool_name": tool_name,
                 "branch_name": branch_name,
                 "files_created": list(files.keys()),
+                "tool_code": tool_code,
+                "test_code": test_code,
                 "error": None,
             }
 
@@ -405,6 +504,8 @@ class CodingAgent:
                 "tool_name": None,
                 "branch_name": None,
                 "files_created": [],
+                "tool_code": None,
+                "test_code": None,
                 "error": str(e),
             }
 

@@ -118,11 +118,13 @@ def generate_tool_code(self, task_id: str) -> dict:
         result = agent.generate_code(task)
 
         if result["success"]:
-            # Create Feature record
+            # Create Feature record with generated code
             feature = Feature(
                 task_id=task.id,
                 branch_name=result["branch_name"],
                 tool_name=result["tool_name"],
+                tool_code=result.get("tool_code"),
+                test_code=result.get("test_code"),
                 status=FeatureStatus.DEVELOPMENT,
                 retry_count=0,
             )
