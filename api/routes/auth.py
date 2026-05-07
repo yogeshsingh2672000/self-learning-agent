@@ -5,7 +5,6 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -23,6 +22,11 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     full_name: str
+
+
+class LoginRequest(BaseModel):
+    username: str  # email
+    password: str
 
 
 class TokenResponse(BaseModel):
@@ -67,11 +71,11 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse, summary="Login and get access token")
 def login(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    payload: LoginRequest,
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    user = db.query(User).filter(User.email == payload.username).first()
+    if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -79,6 +83,7 @@ def login(
         )
     token = create_access_token(data={"sub": user.email})
     return TokenResponse(access_token=token)
+
 
 
 @router.get("/me", response_model=UserResponse, summary="Get current authenticated user")
