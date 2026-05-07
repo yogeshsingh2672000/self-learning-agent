@@ -274,6 +274,40 @@ def reject_task(
     return _task_to_dict(task)
 
 
+@router.post("/{task_id}/retrigger", summary="Re-trigger Celery code generation for a stuck task")
+def retrigger_task(
+    task_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    try:
+        tid = uuid.UUID(task_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid task ID")
+
+    task = db.query(Task).filter(Task.id == tid).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    retriggerable = (TaskStatus.APPROVED, TaskStatus.IN_DEVELOPMENT, TaskStatus.ESCALATED)
+    if task.status not in retriggerable:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Task cannot be re-triggered (status: {task.status.value}). Must be approved, in_development, or escalated.",
+        )
+
+    _log_agent_action(
+        db,
+        action="task_retriggered",
+        task_id=task.id,
+        details={"triggered_by": current_user.email},
+    )
+    db.commit()
+
+    generate_tool_code.delay(str(task.id))
+    return {"retriggered": True, "task_id": str(task.id), "status": task.status.value}
+
+
 @router.post("/{task_id}/vote", summary="Upvote a task")
 def vote_task(
     task_id: str,
