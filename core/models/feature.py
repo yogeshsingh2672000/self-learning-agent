@@ -29,6 +29,7 @@ class Feature(Base, TimestampMixin):
     tool_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     tool_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     test_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    requirements: Mapped[Optional[list]] = mapped_column(JSON, nullable=True, default=list)
     test_results: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     pr_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     pr_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

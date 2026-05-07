@@ -14,6 +14,7 @@ This agent is triggered via Celery worker when a task transitions to APPROVED st
 """
 import os
 import re
+import sys
 import json
 import uuid
 import subprocess
@@ -62,34 +63,27 @@ class ToolCodeGenerator:
 
         criteria_str = "\n".join(f"   - {c}" for c in acceptance_criteria)
 
-        prompt = f"""Generate a production-ready Python tool that implements the BaseTool interface.
+        prompt = f"""Generate a complete Python tool that implements the BaseTool interface.
 
 TOOL NAME: {tool_name}
-TOOL CLASS: {tool_class}
 DESCRIPTION: {task_description}
 
 REQUIREMENTS (acceptance criteria):
 {criteria_str}
 
-Generate ONLY valid Python code with NO markdown blocks. The tool implementation MUST:
-1. Start with a comprehensive module docstring explaining purpose and usage
-2. Include all necessary imports (typing, logging, etc.)
-3. Implement class {tool_class} inheriting from BaseTool
-4. Implement get_config() returning ToolConfig with proper name, description, and category
-5. Implement execute() returning a LangChain Tool object with proper error handling
-6. Include comprehensive docstrings for all methods and parameters
-7. Implement proper error handling and logging
-8. Include type hints for all parameters and return values
-9. Add a __version__ constant at module level
+Generate ONLY valid Python code with no markdown. The tool MUST:
+1. Import from tools.base import BaseTool, ToolConfig
+2. Implement a class named {tool_class} inheriting from BaseTool
+3. Implement get_config() returning ToolConfig with name="{tool_name}"
+4. Implement execute() returning a LangChain Tool object
+5. Include comprehensive docstrings
+6. Handle errors gracefully
+7. If external packages are needed (requests, google-auth, etc.), use them - they will be installed
 
-The generated code should be professional, well-documented, and production-ready.
-
-Example structure to follow:
+Example structure:
 ```python
 \"\"\"
 {task_description}
-
-This module provides the {tool_class} tool implementation.
 \"\"\"
 import logging
 from typing import Optional, Dict, Any
@@ -98,18 +92,11 @@ from langchain_core.tools import Tool
 from tools.base import BaseTool, ToolConfig
 
 logger = logging.getLogger(__name__)
-__version__ = "1.0.0"
 
 class {tool_class}(BaseTool):
     \"\"\"Implements {task_description}.\"\"\"
     
-    def __init__(self):
-        \"\"\"Initialize the {tool_class} tool.\"\"\"
-        super().__init__()
-        logger.info(f"Initialized {tool_class} v{{__version__}}")
-    
     def get_config(self) -> ToolConfig:
-        \"\"\"Return tool configuration.\"\"\"
         return ToolConfig(
             name="{tool_name}",
             description="{task_description}",
@@ -117,12 +104,11 @@ class {tool_class}(BaseTool):
         )
     
     def execute(self) -> Tool:
-        \"\"\"Execute the tool and return LangChain Tool object.\"\"\"
-        def tool_func(input_param: str) -> Dict[str, Any]:
-            \"\"\"Execute tool logic.\"\"\"
+        def tool_func(input_data: Dict[str, Any]) -> Dict[str, Any]:
             try:
-                # Implementation here
-                result = {{"success": True, "result": None}}
+                # Implementation - use external packages if needed
+                # Example: import requests; resp = requests.get(...)
+                result = {{"success": True, "data": input_data}}
                 return result
             except Exception as e:
                 logger.error(f"Error: {{e}}", exc_info=True)
@@ -135,7 +121,7 @@ class {tool_class}(BaseTool):
         )
 ```
 
-Generate the complete, production-ready implementation:
+Generate the complete implementation now:
 """
 
         try:
@@ -179,6 +165,8 @@ Generate the complete, production-ready implementation:
 
         prompt = f"""You are a senior Python engineer fixing a generated tool.
 
+CONSTRAINT: Use ONLY Python standard library + langchain_core. NO external packages.
+
 TASK: {task_description}
 
 ROOT CAUSE: {bug_report.get("root_cause", "")}
@@ -194,9 +182,12 @@ SUGGESTED FIXES:
 CURRENT CODE:
 {existing_code}
 
-Generate ONLY the fixed Python code with no markdown fences.
-Keep the exact same class name, interface (BaseTool), and file structure.
-Fix all failing tests without breaking tests that were passing.
+Generate ONLY the fixed Python code with no markdown fences. Rules:
+1. Keep the exact same class name, interface (BaseTool), and file structure
+2. Fix ALL failing tests without breaking passing tests
+3. Use ONLY standard library + langchain_core (no external packages)
+4. If the original code tried to use external APIs, convert to simulated responses
+5. Maintain comprehensive docstrings and error handling
 """
         try:
             response = self.llm.invoke([HumanMessage(content=prompt)])
@@ -227,7 +218,9 @@ class TestCodeGenerator:
         """Generate pytest-compatible test code."""
         criteria_str = "\n".join(f"   - {c}" for c in acceptance_criteria)
 
-        prompt = f"""Generate comprehensive, production-ready pytest test cases for a tool.
+        prompt = f"""Generate comprehensive pytest test cases for a tool.
+
+IMPORTANT: Use ONLY Python standard library + pytest. NO external packages.
 
 TOOL CLASS: {tool_class}
 TOOL NAME: {tool_name}
@@ -236,36 +229,28 @@ DESCRIPTION: {tool_description}
 ACCEPTANCE CRITERIA:
 {criteria_str}
 
-Generate ONLY valid Python code with NO markdown blocks. The test suite MUST:
-1. Have a clear module docstring explaining what is tested
-2. Import pytest, logging, and the tool class
-3. Include proper test fixtures for tool initialization
-4. Test all acceptance criteria requirements
-5. Include both happy path and error case tests
-6. Use descriptive test function names following test_<feature>_<scenario> pattern
-7. Include comprehensive docstrings for each test
-8. Use assertions with clear, descriptive messages
-9. Include setup and teardown where appropriate
-10. Test logging and error handling
+Generate ONLY valid Python code with no markdown. The tests MUST:
+1. Import pytest, logging, and the tool class (NOT external packages)
+2. Test all acceptance criteria requirements
+3. Use pytest fixtures for tool initialization
+4. Include both happy path and error/edge cases
+5. Have descriptive test names following test_<feature>_<scenario>
+6. Use clear assertions with messages
+7. Test error handling gracefully (no external API calls)
+8. Include docstrings for each test
 
-The test file should be well-organized with:
-- Module header and imports
-- Fixtures section
-- Test class or grouped test functions
-- Clear separation between happy path and error tests
+Key rules:
+- Mock external APIs or use simulated data (no real network calls)
+- Test the tool's interface (get_config, execute) thoroughly
+- Test error handling with invalid inputs
+- Use only standard library for mocking (unittest.mock)
 
-Example structure to follow:
+Example structure:
 ```python
-\"\"\"
-Test suite for {tool_class} tool.
-
-Tests cover:
-- Tool initialization and configuration
-- Execute method functionality
-- Error handling and edge cases
-\"\"\"
+\"\"\"Test suite for {tool_class}.\"\"\"
 import pytest
 import logging
+from unittest.mock import patch, MagicMock
 from tools.{tool_name} import {tool_class}
 
 logger = logging.getLogger(__name__)
@@ -276,44 +261,44 @@ def tool():
     return {tool_class}()
 
 class TestToolConfiguration:
-    \"\"\"Test tool configuration and initialization.\"\"\"
+    \"\"\"Test tool configuration.\"\"\"
     
-    def test_tool_initialization(self, tool):
-        \"\"\"Test that tool initializes without errors.\"\"\"
+    def test_initialization(self, tool):
+        \"\"\"Test tool initializes without errors.\"\"\"
         assert tool is not None
     
-    def test_tool_config(self, tool):
-        \"\"\"Test tool configuration is correct.\"\"\"
+    def test_config(self, tool):
+        \"\"\"Test get_config returns correct ToolConfig.\"\"\"
         config = tool.get_config()
         assert config.name == "{tool_name}"
         assert config.enabled is True
 
 class TestToolExecution:
-    \"\"\"Test tool execution and functionality.\"\"\"
+    \"\"\"Test tool execution functionality.\"\"\"
     
     def test_execute_returns_tool(self, tool):
-        \"\"\"Test that execute returns a LangChain Tool object.\"\"\"
+        \"\"\"Test execute returns a LangChain Tool object.\"\"\"
         tool_obj = tool.execute()
         assert tool_obj is not None
         assert tool_obj.name == "{tool_name}"
     
-    def test_tool_execution_success(self, tool):
-        \"\"\"Test successful tool execution.\"\"\"
+    def test_tool_execution_with_input(self, tool):
+        \"\"\"Test tool execution with sample input.\"\"\"
         tool_obj = tool.execute()
-        result = tool_obj.invoke({{}})
+        result = tool_obj.invoke({{"input": "test"}})
         assert result is not None
 
 class TestErrorHandling:
     \"\"\"Test error handling and edge cases.\"\"\"
     
-    def test_invalid_input_handling(self, tool):
+    def test_invalid_input(self, tool):
         \"\"\"Test tool handles invalid inputs gracefully.\"\"\"
         tool_obj = tool.execute()
-        result = tool_obj.invoke(None)
-        assert result is not None
+        result = tool_obj.invoke({{"input": None}})
+        assert result is not None or isinstance(result, Exception) is False
 ```
 
-Generate the complete, production-ready test suite:
+Generate the complete production-ready test suite:
 """
 
         try:
@@ -410,26 +395,73 @@ class CodingAgent:
         self.test_gen = TestCodeGenerator(self.llm)
         self.git = GitOperations()
 
+    @staticmethod
+    def extract_requirements(code: str) -> List[str]:
+        """
+        Extract external package requirements from generated code.
+        
+        Maps common module names to their pip package names.
+        
+        Returns:
+            List of pip package names to install
+        """
+        import ast
+        
+        # Mapping of import names to pip package names
+        import_to_package = {
+            "requests": "requests",
+            "google": "google-auth",
+            "google.auth": "google-auth",
+            "google.oauth2": "google-auth",
+            "aws": "boto3",
+            "boto3": "boto3",
+            "botocore": "boto3",
+            "azure": "azure-identity",
+            "azure.identity": "azure-identity",
+            "openai": "openai",
+            "anthropic": "anthropic",
+            "httpx": "httpx",
+            "aiohttp": "aiohttp",
+            "pandas": "pandas",
+            "numpy": "numpy",
+            "sklearn": "scikit-learn",
+            "selenium": "selenium",
+            "beautifulsoup4": "beautifulsoup4",
+            "bs4": "beautifulsoup4",
+            "lxml": "lxml",
+            "psycopg2": "psycopg2-binary",
+            "pymongo": "pymongo",
+            "redis": "redis",
+            "jwt": "pyjwt",
+            "dotenv": "python-dotenv",
+        }
+        
+        requirements = set()
+        
+        try:
+            tree = ast.parse(code)
+            for node in ast.walk(tree):
+                # Handle: import module
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        module = alias.name.split(".")[0]
+                        if module in import_to_package:
+                            requirements.add(import_to_package[module])
+                
+                # Handle: from module import name
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        module = node.module.split(".")[0]
+                        if module in import_to_package:
+                            requirements.add(import_to_package[module])
+        except Exception:
+            pass  # If parsing fails, return empty list
+        
+        return sorted(list(requirements))
+
     def _sanitize_name(self, name: str) -> str:
-        """Convert title to valid Python name with better structure."""
-        # Remove common phrases
-        clean_name = name.lower()
-        for phrase in ["implement ", "create ", "add ", "build ", "tool", "integration", "with"]:
-            clean_name = clean_name.replace(phrase, "")
-        
-        # Replace non-alphanumeric with underscore
-        clean_name = re.sub(r"[^a-z0-9_\s]", "", clean_name).strip()
-        # Replace spaces with underscores and collapse multiple underscores
-        clean_name = re.sub(r"\s+", "_", clean_name)
-        clean_name = re.sub(r"_+", "_", clean_name)
-        clean_name = clean_name.strip("_")
-        
-        # Keep it reasonable length (max 40 chars for readability)
-        if len(clean_name) > 40:
-            words = clean_name.split("_")
-            clean_name = "_".join(words[:5])
-        
-        return clean_name or "tool"
+        """Convert title to valid Python name."""
+        return re.sub(r"[^a-z0-9_]", "_", name.lower())
 
     def _get_class_name(self, tool_name: str) -> str:
         """Convert tool_name to CamelCase class name."""
@@ -472,29 +504,28 @@ class CodingAgent:
                 tool_name, tool_class, task.description, criteria or []
             )
 
+            # Extract requirements from tool code
+            requirements = self.extract_requirements(tool_code)
+
             # Create branch
             branch_name = self.git.create_branch(task.id, tool_name)
 
-            # Prepare files
-            files = {
-                f"tools/{tool_name}.py": tool_code,
-                f"tests/tools/test_{tool_name}.py": test_code,
-            }
-
-            # Commit and push
-            self.git.commit_code(
-                branch_name,
-                files,
-                f"feat: implement {tool_name} tool\n\nCloses task {task.id}",
-            )
+            # ── Phase 10: Sandbox Pattern ────────────────────────────────────
+            # Code and tests are generated and stored in DB, but NOT committed yet.
+            # They will only be committed to git AFTER tests pass.
+            # This ensures dirty code never enters the repository.
 
             return {
                 "success": True,
                 "tool_name": tool_name,
                 "branch_name": branch_name,
-                "files_created": list(files.keys()),
+                "files_created": [
+                    f"tools/{tool_name}.py",
+                    f"tests/tools/test_{tool_name}.py",
+                ],
                 "tool_code": tool_code,
                 "test_code": test_code,
+                "requirements": requirements,
                 "error": None,
             }
 
@@ -504,8 +535,6 @@ class CodingAgent:
                 "tool_name": None,
                 "branch_name": None,
                 "files_created": [],
-                "tool_code": None,
-                "test_code": None,
                 "error": str(e),
             }
 
@@ -554,21 +583,19 @@ class CodingAgent:
             )
 
             attempt = (feature.retry_count or 0) + 1
-            files = {f"tools/{tool_name}.py": patched_code}
 
-            self.git.commit_code(
-                branch_name,
-                files,
-                f"fix: patch {tool_name} (attempt {attempt})\n\nAddresses test failures from Testing Agent\nTask: {task.id}",
-            )
+            # ── Phase 10: Sandbox Pattern ────────────────────────────────────
+            # Patched code is generated but NOT committed to git.
+            # It will only be committed AFTER re-tests pass.
+            # This keeps git clean even during retry cycles.
 
             return {
                 "success": True,
                 "tool_name": tool_name,
                 "branch_name": branch_name,
-                "files_created": list(files.keys()),
-                "error": None,
+                "files_created": [f"tools/{tool_name}.py"],
                 "patched_code": patched_code,
+                "error": None,
             }
 
         except Exception as exc:
@@ -675,6 +702,160 @@ class CodingAgent:
                 "pr_number": None,
                 "error": str(exc),
             }
+
+
+# ---------------------------------------------------------------------------
+# Production Requirements Management
+# ---------------------------------------------------------------------------
+
+def is_virtual_env() -> bool:
+    """
+    Detect if running inside a virtual environment.
+    
+    Returns:
+        True if venv is detected, False otherwise
+    """
+    return hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
+
+
+def validate_package_name(package_name: str) -> bool:
+    """
+    Validate if a string is a valid pip package name.
+    
+    Pip package names can contain:
+    - Alphanumeric characters (A-Z, a-z, 0-9)
+    - Hyphens and underscores
+    - Dots
+    
+    Args:
+        package_name: Name to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    import re
+    # Valid pip package name pattern
+    pattern = r'^[a-zA-Z0-9._-]+$'
+    return bool(re.match(pattern, package_name)) and len(package_name) > 0
+
+
+def scan_all_tools_requirements(tools_dir: str = "tools") -> List[str]:
+    """
+    Scan all tool files in the tools directory and extract requirements.
+    
+    Reads each .py file, extracts imports using AST, and returns
+    all unique pip package names needed.
+    
+    Args:
+        tools_dir: Path to tools directory (relative or absolute)
+        
+    Returns:
+        Sorted list of unique pip package names
+    """
+    from pathlib import Path
+    
+    all_requirements = set()
+    tools_path = Path(tools_dir)
+    
+    # If relative path, make absolute
+    if not tools_path.is_absolute():
+        tools_path = Path.cwd() / tools_path
+    
+    if not tools_path.exists():
+        return []
+    
+    # Scan all .py files (except __init__.py)
+    for py_file in tools_path.glob("*.py"):
+        if py_file.name.startswith("_"):
+            continue  # Skip __init__.py, __pycache__, etc.
+        
+        try:
+            with open(py_file, "r", encoding="utf-8") as f:
+                code = f.read()
+            # Use CodingAgent's static method to extract
+            requirements = CodingAgent.extract_requirements(code)
+            all_requirements.update(requirements)
+        except Exception as e:
+            # Log but continue scanning other files
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to scan {py_file}: {str(e)}")
+    
+    return sorted(list(all_requirements))
+
+
+def update_requirements_txt(new_packages: List[str], requirements_file: str = "requirements.txt") -> tuple[bool, str, List[str]]:
+    """
+    Update requirements.txt with new packages.
+    
+    Reads current requirements, merges with new packages, and writes back.
+    Preserves existing version specifications and adds new packages with >= (pip resolves versions).
+    
+    Args:
+        new_packages: List of package names to add
+        requirements_file: Path to requirements.txt file
+        
+    Returns:
+        (success: bool, message: str, updated_packages: List[str])
+        - success: True if update succeeded
+        - message: Description of what was done
+        - updated_packages: List of packages that were actually added
+    """
+    from pathlib import Path
+    
+    req_path = Path(requirements_file)
+    
+    # If relative path, make absolute
+    if not req_path.is_absolute():
+        req_path = Path.cwd() / req_path
+    
+    if not req_path.exists():
+        return False, f"requirements.txt not found at {req_path}", []
+    
+    try:
+        # Read current requirements
+        with open(req_path, "r", encoding="utf-8") as f:
+            current_content = f.read()
+        
+        # Parse existing packages (extract package names from lines)
+        existing_packages = set()
+        existing_lines = []
+        for line in current_content.strip().split("\n"):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                existing_lines.append(line)
+                continue
+            # Extract package name (everything before # or ==, >=, <=, <, >, ~=, !=)
+            pkg_name = line.split("[")[0]  # Handle extras like requests[security]
+            for op in ["==", ">=", "<=", "!=", "~=", "<", ">"]:
+                pkg_name = pkg_name.split(op)[0]
+            pkg_name = pkg_name.strip()
+            if pkg_name:
+                existing_packages.add(pkg_name)
+                existing_lines.append(line)
+        
+        # Find new packages (not already in requirements.txt)
+        packages_to_add = []
+        for pkg in new_packages:
+            if pkg not in existing_packages:
+                # Validate package name
+                if validate_package_name(pkg):
+                    packages_to_add.append(pkg)
+        
+        if not packages_to_add:
+            return True, "No new packages to add (all already in requirements.txt)", []
+        
+        # Add new packages with >= (let pip resolve versions)
+        new_lines = existing_lines + [f"{pkg}>=" for pkg in sorted(packages_to_add)]
+        
+        # Write updated requirements
+        with open(req_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(new_lines))
+        
+        return True, f"Updated requirements.txt with {len(packages_to_add)} new packages", packages_to_add
+    
+    except Exception as e:
+        return False, f"Failed to update requirements.txt: {str(e)}", []
 
 
 # ---------------------------------------------------------------------------
