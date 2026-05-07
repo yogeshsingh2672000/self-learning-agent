@@ -27,7 +27,7 @@ class AgentLog(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     agent_type: Mapped[AgentType] = mapped_column(
-        SAEnum(AgentType, name="agenttype"), nullable=False
+        SAEnum(AgentType, name="agenttype", values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     task_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("tasks.id"), nullable=True, index=True
@@ -35,6 +35,6 @@ class AgentLog(Base, TimestampMixin):
     action: Mapped[str] = mapped_column(String(500), nullable=False)
     details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     status: Mapped[AgentLogStatus] = mapped_column(
-        SAEnum(AgentLogStatus, name="agentlogstatus"), nullable=False
+        SAEnum(AgentLogStatus, name="agentlogstatus", values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -23,6 +23,6 @@ class ApprovalLog(Base, TimestampMixin):
     )
     approver: Mapped[str] = mapped_column(String(255), nullable=False)
     decision: Mapped[ApprovalDecision] = mapped_column(
-        SAEnum(ApprovalDecision, name="approvaldecision"), nullable=False
+        SAEnum(ApprovalDecision, name="approvaldecision", values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

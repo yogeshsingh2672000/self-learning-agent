@@ -34,7 +34,7 @@ class Feature(Base, TimestampMixin):
     pr_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     pr_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     status: Mapped[FeatureStatus] = mapped_column(
-        SAEnum(FeatureStatus, name="featurestatus"),
+        SAEnum(FeatureStatus, name="featurestatus", values_callable=lambda x: [e.value for e in x]),
         default=FeatureStatus.DEVELOPMENT,
         nullable=False,
     )

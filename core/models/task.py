@@ -29,7 +29,7 @@ class Task(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[TaskStatus] = mapped_column(
-        SAEnum(TaskStatus, name="taskstatus"),
+        SAEnum(TaskStatus, name="taskstatus", values_callable=lambda x: [e.value for e in x]),
         default=TaskStatus.PENDING_APPROVAL,
         nullable=False,
     )

@@ -40,7 +40,7 @@ class ChatHistory(Base, TimestampMixin):
     
     # Role: user or agent
     role: Mapped[MessageRole] = mapped_column(
-        SAEnum(MessageRole, name="messagerole"),
+        SAEnum(MessageRole, name="messagerole", values_callable=lambda x: [e.value for e in x]),
         nullable=False
     )
     

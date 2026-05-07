@@ -9,6 +9,7 @@ Endpoints:
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -17,6 +18,9 @@ from api.deps import get_current_user
 from core.database import get_db
 from core.models import User, ChatHistory, MessageRole, Task, TaskStatus
 from agents.query_agent import create_query_agent
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Initialize router
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -195,6 +199,8 @@ async def send_message(
     
     except Exception as e:
         db.rollback()
+        # Log the full error for debugging
+        logger.error(f"Chat error: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")
 
 
