@@ -12,6 +12,7 @@ Responsibilities:
 
 This agent is triggered via Celery worker when a task transitions to APPROVED status.
 """
+import os
 import re
 import json
 import uuid
@@ -285,8 +286,11 @@ class GitOperations:
             True if successful
         """
         try:
-            # Write files
+            # Write files (create parent directories if needed)
             for path, content in files.items():
+                parent = os.path.dirname(path)
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
                 with open(path, "w") as f:
                     f.write(content)
 
